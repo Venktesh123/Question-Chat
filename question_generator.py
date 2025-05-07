@@ -1,31 +1,22 @@
 import os
 import numpy as np
-import json
 from sentence_transformers import SentenceTransformer
-import google.generativeai as genai
 from flask import request, jsonify
+from langchain_groq import ChatGroq
+from langchain.schema import HumanMessage
 
-# Global variables for vector data
+# Global variables for vector data and API key
 chunks = None
 embeddings = None
 embed_model = None
+# Use the Groq API key that's working for chat
+GROQ_API_KEY = "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"
 
 def setup_dependencies():
     """Setup dependencies for question generation"""
     global embed_model
     
-    # Load Google API Key
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-    
-    if not GOOGLE_API_KEY:
-        print("Warning: Google API Key not found. Please check your environment variables.")
-    
-    try:
-        genai.configure(api_key=GOOGLE_API_KEY)
-    except Exception as e:
-        print(f"Error configuring Google Generative AI: {str(e)}")
-    
-    # Load sentence transformer model
+    # Load sentence transformer model only - no Google API
     try:
         embed_model = SentenceTransformer('all-MiniLM-L6-v2')
         print("SentenceTransformer model loaded successfully")
@@ -83,36 +74,51 @@ def semantic_search(query_text, chunks, embeddings, top_k=1):
     
     return retrieved_chunks
 
-# Question Generation
+# Question Generation - Using ONLY Groq, NOT Gemini
 def generate_questions(retrieved_content, co_text, bloom_level):
-    """Generate questions using Gemini AI"""
-    prompt_parts = [
-        "You are a Question Generator Agent.",
-        f"Course Outcome (CO): {co_text}",
-        f"Bloom's Taxonomy Level: {bloom_level}",
-        "Based on the content below, generate multiple questions:",
-        "- Two Objective Type Questions",
-        "- Two Short Answer Type Questions",
-        "Content:\n" + retrieved_content,
-        "\nOnly output the questions in the following format:",
-        "Objective Questions:",
-        "1. <question 1>",
-        "2. <question 2>",
-        "Short Answer Questions:",
-        "1. <question 1>",
-        "2. <question 2>"
-    ]
-
-    full_prompt = "\n".join(prompt_parts)
-
+    """Generate questions using Groq API"""
+    prompt = f"""
+    You are a Question Generator Agent.
+    Course Outcome (CO): {co_text}
+    Bloom's Taxonomy Level: {bloom_level}
+    
+    Based on the content below, generate multiple questions:
+    - Two Objective Type Questions
+    - Two Short Answer Type Questions
+    
+    Content:
+    {retrieved_content}
+    
+    Only output the questions in the following format:
+    Objective Questions:
+    1. <question 1>
+    2. <question 2>
+    
+    Short Answer Questions:
+    1. <question 1>
+    2. <question 2>
+    """
+    
     try:
-        model = genai.GenerativeModel('gemini-1.5-pro')
-        response = model.generate_content(full_prompt)
-        output = response.text.strip()
+        # Create Groq LLM instance
+        llm = ChatGroq(
+            model="llama3-70b-8192",
+            api_key=GROQ_API_KEY,
+            temperature=0.5,
+            max_tokens=2048
+        )
+        
+        # Generate questions using Groq
+        print("Generating questions using Groq API...")
+        response = llm.invoke([HumanMessage(content=prompt)])
+        output = response.content.strip()
+        print("Questions generated successfully")
         return output
+        
     except Exception as e:
-        print(f"Error generating questions: {str(e)}")
-        return "Error generating questions. Please check logs."
+        error_msg = str(e)
+        print(f"Error generating questions with Groq: {error_msg}")
+        return f"Error generating questions: {error_msg}"
 
 # Parse generated questions into structured format
 def parse_questions(questions_text):
@@ -189,9 +195,15 @@ def generate_questions_api(request):
     selected_bloom = data['bloom_level']
     
     try:
-        # Generate questions
+        # Generate questions using Groq
         best_chunk = semantic_search(selected_co, chunks, embeddings, top_k=1)[0]
         questions_text = generate_questions(best_chunk, selected_co, selected_bloom)
+        
+        # Check for errors
+        if questions_text.startswith("Error generating"):
+            return jsonify({
+                "error": questions_text
+            }), 500
         
         # Parse the questions into the requested structure
         questions_dict = parse_questions(questions_text)
@@ -205,6 +217,7 @@ def generate_questions_api(request):
         })
     
     except Exception as e:
+        error_msg = str(e)
         return jsonify({
-            "error": str(e)
+            "error": error_msg
         }), 500

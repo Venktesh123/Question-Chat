@@ -11,9 +11,9 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain_community.document_loaders import TextLoader
 
-# Global variables
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# Global variables - hardcoded for testing
+GOOGLE_API_KEY = "AIzaSyAyNEqRJt4giFs_1aaQ6p0TkDCPgOhkGY8"
+GROQ_API_KEY = "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"
 
 # Define constants
 DEFAULT_CONFIG = {
@@ -323,6 +323,9 @@ def lookup_relevant_chunks(query, vectorstore):
 
 def chat_api(request):
     """Handler function for the /api/chat endpoint."""
+    # Debug API keys
+    print(f"API Keys in chat_api: Google={bool(GOOGLE_API_KEY)}, Groq={bool(GROQ_API_KEY)}")
+    
     if not GOOGLE_API_KEY or not GROQ_API_KEY:
         missing_keys = []
         if not GOOGLE_API_KEY:
