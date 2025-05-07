@@ -12,8 +12,8 @@ from langchain.prompts import PromptTemplate
 from langchain_community.document_loaders import TextLoader
 
 # Global variables - hardcoded for testing
-GOOGLE_API_KEY = "AIzaSyAyNEqRJt4giFs_1aaQ6p0TkDCPgOhkGY8"
-GROQ_API_KEY = "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"
+GOOGLE_API_KEY = ""
+GROQ_API_KEY = ""
 
 # Define constants
 DEFAULT_CONFIG = {

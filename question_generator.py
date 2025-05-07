@@ -10,7 +10,7 @@ chunks = None
 embeddings = None
 embed_model = None
 # Use the Groq API key that's working for chat
-GROQ_API_KEY = "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"
+GROQ_API_KEY = ""
 
 def setup_dependencies():
     """Setup dependencies for question generation"""
