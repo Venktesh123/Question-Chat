@@ -8,11 +8,15 @@ from question_generator import (
     generate_questions_api
 )
 from civi_bot import prepare_vectorstore, chat_api, get_status
+from utils import check_api_keys, create_env_file_if_missing
 
 # Load environment variables
 load_dotenv()
 
-# Check required API keys
+# Check for .env file and create a sample if it doesn't exist
+create_env_file_if_missing()
+
+# Get API keys from environment variables
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -27,9 +31,14 @@ qg_initialize_vector_db()
 @app.route('/', methods=['GET'])
 def api_status():
     """Root endpoint for API status"""
+    # Check API keys status
+    keys_present, missing_keys = check_api_keys()
+    key_status_message = "All required API keys are present" if keys_present else f"Missing API keys: {', '.join(missing_keys)}"
+    
     return jsonify({
         "status": "online",
         "message": "Merged API for Course Outcome Question Generator and CiviBot",
+        "api_keys_status": key_status_message,
         "services": {
             "question_generator": {
                 "status": "online",
@@ -72,6 +81,13 @@ if __name__ == "__main__":
     # Get port from environment variable or use default
     port = int(os.environ.get("PORT", 8000))
     
+    # Check if API keys are present
+    keys_present, missing_keys = check_api_keys()
+    if not keys_present:
+        print(f"WARNING: Missing API keys: {', '.join(missing_keys)}")
+        print("Please add the missing API keys to your .env file")
+    
     # Run the Flask app
-    print(f"Starting merged API server on port {port}...")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    debug_mode = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
+    print(f"Starting merged API server on port {port}, debug mode: {debug_mode}...")
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)

@@ -11,9 +11,16 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain_community.document_loaders import TextLoader
 
-# Global variables - hardcoded for testing
-GOOGLE_API_KEY = ""
-GROQ_API_KEY = ""
+# Load environment variables
+load_dotenv()
+
+# Global variables
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+# Debug API keys
+print(f"GROQ_API_KEY in civi_bot.py: {'Present' if GROQ_API_KEY else 'Missing'}")
+print(f"GOOGLE_API_KEY in civi_bot.py: {'Present' if GOOGLE_API_KEY else 'Missing'}")
 
 # Define constants
 DEFAULT_CONFIG = {

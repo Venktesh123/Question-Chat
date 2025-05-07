@@ -4,13 +4,17 @@ from sentence_transformers import SentenceTransformer
 from flask import request, jsonify
 from langchain_groq import ChatGroq
 from langchain.schema import HumanMessage
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Global variables for vector data and API key
 chunks = None
 embeddings = None
 embed_model = None
-# Use the Groq API key that's working for chat
-GROQ_API_KEY = ""
+# Get Groq API key from environment variables
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 def setup_dependencies():
     """Setup dependencies for question generation"""
@@ -77,26 +81,34 @@ def semantic_search(query_text, chunks, embeddings, top_k=1):
 # Question Generation - Using ONLY Groq, NOT Gemini
 def generate_questions(retrieved_content, co_text, bloom_level):
     """Generate questions using Groq API"""
+    if not GROQ_API_KEY:
+        print("Error: GROQ_API_KEY not found in environment variables")
+        return "Error: GROQ_API_KEY not found in environment variables"
+    
+    # Updated prompt to request exactly one question of each type and MCQ options
     prompt = f"""
     You are a Question Generator Agent.
     Course Outcome (CO): {co_text}
     Bloom's Taxonomy Level: {bloom_level}
     
-    Based on the content below, generate multiple questions:
-    - Two Objective Type Questions
-    - Two Short Answer Type Questions
+    Based on the content below, generate exactly ONE objective question and ONE short answer question:
     
     Content:
     {retrieved_content}
     
-    Only output the questions in the following format:
-    Objective Questions:
-    1. <question 1>
-    2. <question 2>
+    For the objective question, include EXACTLY FOUR options (A, B, C, D) without indicating which option is correct.
     
-    Short Answer Questions:
-    1. <question 1>
-    2. <question 2>
+    Only output the questions in the following format:
+    
+    Objective Question:
+    <question text>
+    A. <option 1>
+    B. <option 2>
+    C. <option 3>
+    D. <option 4>
+    
+    Short Answer Question:
+    <question text>
     """
     
     try:
@@ -122,34 +134,38 @@ def generate_questions(retrieved_content, co_text, bloom_level):
 
 # Parse generated questions into structured format
 def parse_questions(questions_text):
-    """Parse the generated questions into a structured format"""
-    objective_questions = []
-    subjective_questions = []
+    """Parse the generated questions into a structured format with options for objective questions"""
+    objective_question = None
+    objective_options = []
+    subjective_question = None
     
-    if "Objective Questions:" in questions_text and "Short Answer Questions:" in questions_text:
-        parts = questions_text.split("Short Answer Questions:")
-        obj_part = parts[0].replace("Objective Questions:", "").strip()
+    # Parsing logic for the new format
+    if "Objective Question:" in questions_text and "Short Answer Question:" in questions_text:
+        parts = questions_text.split("Short Answer Question:")
+        obj_part = parts[0].replace("Objective Question:", "").strip()
         subj_part = parts[1].strip()
         
-        # Extract objective questions
-        for line in obj_part.split("\n"):
-            if line.strip() and any(c.isdigit() for c in line[:2]):
-                question = line.strip()
-                # Remove the number prefix (e.g., "1. ", "2. ")
-                if ". " in question[:3]:
-                    question = question[question.find(". ")+2:]
-                objective_questions.append(question)
+        # Extract objective question and options
+        obj_lines = obj_part.split("\n")
+        if obj_lines:
+            objective_question = obj_lines[0].strip()
+            
+            # Extract options
+            for line in obj_lines[1:]:
+                if line.strip() and line.strip()[0] in "ABCD" and ". " in line:
+                    option = line.strip()
+                    objective_options.append(option)
         
-        # Extract subjective questions
-        for line in subj_part.split("\n"):
-            if line.strip() and any(c.isdigit() for c in line[:2]):
-                question = line.strip()
-                # Remove the number prefix
-                if ". " in question[:3]:
-                    question = question[question.find(". ")+2:]
-                subjective_questions.append(question)
+        # Extract subjective question
+        subjective_question = subj_part.strip()
     
-    return {"objective": objective_questions, "subjective": subjective_questions}
+    return {
+        "objective": {
+            "question": objective_question,
+            "options": objective_options
+        },
+        "subjective": subjective_question
+    }
 
 # Initialize vector database
 def initialize_vector_db():
@@ -180,6 +196,13 @@ def generate_questions_api(request):
     """Handler function for the generate-questions endpoint"""
     global chunks, embeddings
     
+    # Check if API key is available
+    if not GROQ_API_KEY:
+        print("Error: GROQ_API_KEY not found in environment variables")
+        return jsonify({
+            "error": "GROQ_API_KEY not found in environment variables"
+        }), 500
+    
     if chunks is None or embeddings is None:
         initialize_vector_db()
     
@@ -200,7 +223,7 @@ def generate_questions_api(request):
         questions_text = generate_questions(best_chunk, selected_co, selected_bloom)
         
         # Check for errors
-        if questions_text.startswith("Error generating"):
+        if questions_text.startswith("Error generating") or questions_text.startswith("Error:"):
             return jsonify({
                 "error": questions_text
             }), 500
